@@ -28,8 +28,8 @@ try {
 
 // 4. Start Node.js
 try {
-  console.log("Killing old processes...");
-  spawn('pkill', ['-f', 'node']);
+  console.log("Killing old app.js processes...");
+  spawn('pkill', ['-f', 'node app.js']);
   setTimeout(() => {
     const child = spawn('node', ['app.js'], { detached: true, stdio: 'ignore' });
     child.unref();
