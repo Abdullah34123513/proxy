@@ -91,15 +91,39 @@ function forwardRequest(targetUrl, req, res) {
     if (pRes.headers.location && req.url.includes('?u=')) {
       const proxyDomain = req.headers.host || 'vpn.abdullahsourcing.com';
       const proto = req.headers['x-forwarded-proto'] || (req.connection.encrypted ? 'https' : 'http');
-      
-      // Resolve relative redirects against the current target URL
       const absoluteLocation = url.resolve(targetUrl, pRes.headers.location);
       pRes.headers.location = `${proto}://${proxyDomain}/?u=${absoluteLocation}`;
       log(`Redirect rewritten: ${pRes.headers.location}`);
     }
 
-    res.writeHead(pRes.statusCode, pRes.headers);
-    pRes.pipe(res, { end: true });
+    // HTML Rewriting for sub-resources (links, images, scripts)
+    const isHtml = pRes.headers['content-type'] && pRes.headers['content-type'].includes('text/html');
+    const proxyDomain = req.headers.host || 'vpn.abdullahsourcing.com';
+    const proto = req.headers['x-forwarded-proto'] || (req.connection.encrypted ? 'https' : 'http');
+    const proxyBase = `${proto}://${proxyDomain}/?u=`;
+
+    if (isHtml && req.url.includes('?u=')) {
+      delete pRes.headers['content-length']; // Length will change after rewrite
+      res.writeHead(pRes.statusCode, pRes.headers);
+      
+      pRes.on('data', (chunk) => {
+        let html = chunk.toString();
+        // Regex to find href, src, action attributes and prepend the proxy URL
+        // It uses url.resolve to handle relative vs absolute paths correctly
+        html = html.replace(/(href|src|action)=["']([^"']+)["']/gi, (match, attr, contentUrl) => {
+          if (contentUrl.startsWith('data:') || contentUrl.startsWith('javascript:') || contentUrl.startsWith('#')) {
+            return match; // Ignore data URIs and anchor links
+          }
+          const absoluteUrl = url.resolve(targetUrl, contentUrl);
+          return `${attr}="${proxyBase}${absoluteUrl}"`;
+        });
+        res.write(html);
+      });
+      pRes.on('end', () => res.end());
+    } else {
+      res.writeHead(pRes.statusCode, pRes.headers);
+      pRes.pipe(res, { end: true });
+    }
   });
 
   pReq.on('error', (e) => {
