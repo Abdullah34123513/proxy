@@ -2,27 +2,31 @@ const http = require('http');
 const https = require('https');
 const net = require('net');
 const url = require('url');
+const fs = require('fs');
+const path = require('path');
 
 const PORT = 3000;
+const LOG_FILE = path.join(__dirname, 'proxy.log');
 
-// Browsers-like headers to avoid being blocked
+// Log to file for debugging on Hostinger
+function log(msg) {
+  const line = `[${new Date().toISOString()}] ${msg}\n`;
+  fs.appendFileSync(LOG_FILE, line);
+  console.log(msg);
+}
+
+// Browsers-like headers
 const SPOOF_HEADERS = {
   'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36',
   'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
   'accept-language': 'en-US,en;q=0.9',
-  'cache-control': 'max-age=0',
-  'sec-ch-ua': '"Chromium";v="110", "Not A(Brand";v="24", "Google Chrome";v="110"',
-  'sec-ch-ua-mobile': '?0',
-  'sec-ch-ua-platform': '"Windows"',
-  'sec-fetch-dest': 'document',
-  'sec-fetch-mode': 'navigate',
-  'sec-fetch-site': 'none',
-  'sec-fetch-user': '?1',
-  'upgrade-insecure-requests': '1'
+  'cache-control': 'max-age=0'
 };
 
 const server = http.createServer((req, res) => {
   try {
+    log(`Request: ${req.method} ${req.url}`);
+
     // Mode 1: Web-based proxy (?u=URL)
     const q = url.parse(req.url, true).query;
     if (q.u && q.u.startsWith('http')) {
@@ -36,15 +40,11 @@ const server = http.createServer((req, res) => {
 
     // Default: show landing page
     res.writeHead(200, { 'Content-Type': 'text/html' });
-    return res.end(
-      '<h1>Web Proxy Running</h1>' +
-      '<p>Append <b>?u=URL</b> to your domain to browse.</p>' +
-      '<p>Or configure your app to use this as an HTTP proxy.</p>'
-    );
+    return res.end('<h1>Web Proxy Running</h1><p>Append <b>?u=URL</b> to your domain to browse.</p>');
   } catch (err) {
-    console.error('Proxy Server Error:', err);
+    log(`Server Error: ${err.message}`);
     res.writeHead(500);
-    res.end('Proxy Server Error: ' + err.message);
+    res.end('<h1>Proxy Server Error</h1><p>' + err.message + '</p>');
   }
 });
 
@@ -52,6 +52,7 @@ const server = http.createServer((req, res) => {
 server.on('connect', (req, clientSocket, head) => {
   const [hostname, port] = req.url.split(':');
   const targetPort = parseInt(port) || 443;
+  log(`CONNECT: ${hostname}:${targetPort}`);
 
   const serverSocket = net.connect(targetPort, hostname, () => {
     clientSocket.write('HTTP/1.1 200 Connection Established\r\n\r\n');
@@ -61,6 +62,7 @@ server.on('connect', (req, clientSocket, head) => {
   });
 
   serverSocket.on('error', (err) => {
+    log(`CONNECT Error: ${err.message}`);
     clientSocket.write('HTTP/1.1 502 Bad Gateway\r\n\r\n');
     clientSocket.end();
   });
@@ -72,15 +74,12 @@ server.on('connect', (req, clientSocket, head) => {
 
 function forwardRequest(targetUrl, req, res) {
   const opt = url.parse(targetUrl);
-  
-  // Merge spoofed headers with original headers
   opt.headers = Object.assign({}, SPOOF_HEADERS, req.headers);
   
-  // Important cleanup
   opt.headers.host = opt.host;
-  delete opt.headers['accept-encoding']; // Stay uncompressed for stability through bridge
+  delete opt.headers['accept-encoding'];
   delete opt.headers['connection'];
-  delete opt.headers['content-length']; // Let Node recalculate if needed
+  delete opt.headers['content-length'];
   
   opt.method = req.method;
   opt.rejectUnauthorized = false; // Bypass SSL certificate issues
@@ -88,21 +87,17 @@ function forwardRequest(targetUrl, req, res) {
   const lib = targetUrl.startsWith('https') ? https : http;
 
   const pReq = lib.request(opt, (pRes) => {
-    // Forward status and headers
     res.writeHead(pRes.statusCode, pRes.headers);
-    
-    // Pipe the response body
     pRes.pipe(res, { end: true });
   });
 
   pReq.on('error', (e) => {
-    console.error('Forward Error:', targetUrl, e.message);
+    log(`Fetch Error (${targetUrl}): ${e.message}`);
     res.writeHead(502);
-    res.end('<h1>Proxy Fetch Error</h1><p>Target: ' + targetUrl + '</p><p>Error: ' + e.message + '</p>');
+    res.end('<h1>Proxy Fetch Error</h1><p>' + e.message + '</p>');
   });
 
-  // Pipe the request body (for POST, etc)
   req.pipe(pReq, { end: true });
 }
 
-server.listen(PORT, () => console.log('Improved Proxy ready on port ' + PORT));
+server.listen(PORT, () => log('Proxy listening on port ' + PORT));
