@@ -1,0 +1,6 @@
+Options -Indexes
+DirectoryIndex bridge.php
+RewriteEngine On
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^(.*)$ bridge.php [L]
