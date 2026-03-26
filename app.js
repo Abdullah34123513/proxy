@@ -1,4 +1,5 @@
 const http = require('http');
+const https = require('https');
 const url = require('url');
 
 const PORT = 3000;
@@ -14,11 +15,15 @@ const server = http.createServer((req, res) => {
     }
 
     const opt = url.parse(t);
-    opt.headers = req.headers;
+    opt.headers = Object.assign({}, req.headers);
     delete opt.headers.host;
+    delete opt.headers['accept-encoding']; // prevent compressed responses
     opt.method = req.method;
 
-    const pReq = http.request(opt, (pRes) => {
+    // Pick http or https based on target URL
+    const lib = t.startsWith('https') ? https : http;
+
+    const pReq = lib.request(opt, (pRes) => {
       res.writeHead(pRes.statusCode, pRes.headers);
       pRes.pipe(res, { end: true });
     });
