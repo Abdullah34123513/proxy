@@ -18,51 +18,45 @@ if (in_array($_SERVER['REQUEST_METHOD'], ['POST', 'PUT', 'PATCH'])) {
     curl_setopt($ch, CURLOPT_POSTFIELDS, file_get_contents('php://input'));
 }
 
-// Handle Response Headers
-curl_setopt($ch, CURLOPT_HEADERFUNCTION, function($ch, $header) {
-    $len = strlen($header);
-    $h = trim($header);
-    
-    if (!$h) return $len;
-
-    // Handle Status Line
-    if (preg_match('/^HTTP\/\d\.\d\s+(\d+)/i', $h, $matches)) {
-        http_response_code(intval($matches[1]));
-        return $len;
-    }
-
-    $lower = strtolower($h);
-    // Block list for HTTP/2 compatibility and proxy stability
-    $blocked = [
-        'transfer-encoding:',
-        'content-length:',
-        'connection:',
-        'content-encoding:',
-        'server:',
-        'proxy-',
-        'expect-ct:',
-        'alt-svc:',
-        'host:'
-    ];
-
-    foreach ($blocked as $b) {
-        if (strpos($lower, $b) === 0) return $len;
-    }
-
-    // Set-Cookie must be appended, others should be replaced to avoid duplicates
-    $replace = (strpos($lower, 'set-cookie:') === 0) ? false : true;
-    header($h, $replace);
-    
-    return $len;
+// We will capture headers into an array first, then process them
+$res_headers = [];
+curl_setopt($ch, CURLOPT_HEADERFUNCTION, function($ch, $header) use (&$res_headers) {
+    $res_headers[] = $header;
+    return strlen($header);
 });
 
 $response = curl_exec($ch);
-$error = curl_error($ch);
+$http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
 curl_close($ch);
 
 if ($response === false) {
     http_response_code(502);
-    die('Bridge Error: ' . $error);
+    die('Bridge Error');
+}
+
+// Set status code first
+http_response_code($http_code);
+
+// Only forward safe/essential headers
+foreach ($res_headers as $h) {
+    $h = trim($h);
+    if (!$h || stripos($h, 'HTTP/') === 0) continue;
+    
+    $lower = strtolower($h);
+    $is_safe = false;
+    $safe_prefixes = ['content-type:', 'location:', 'set-cookie:', 'cache-control:', 'pragma:', 'expires:'];
+    
+    foreach ($safe_prefixes as $prefix) {
+        if (strpos($lower, $prefix) === 0) {
+            $is_safe = true;
+            break;
+        }
+    }
+    
+    if ($is_safe) {
+        $replace = (strpos($lower, 'set-cookie:') === 0) ? false : true;
+        header($h, $replace);
+    }
 }
 
 echo $response;
