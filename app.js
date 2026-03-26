@@ -90,8 +90,12 @@ function forwardRequest(targetUrl, req, res) {
     // Rewrite redirects for Web Mode (/?u=)
     if (pRes.headers.location && req.url.includes('?u=')) {
       const proxyDomain = req.headers.host || 'vpn.abdullahsourcing.com';
-      const protocol = req.connection.encrypted ? 'https' : 'http';
-      pRes.headers.location = `${protocol}://${proxyDomain}/?u=${pRes.headers.location}`;
+      const proto = req.headers['x-forwarded-proto'] || (req.connection.encrypted ? 'https' : 'http');
+      
+      // Resolve relative redirects against the current target URL
+      const absoluteLocation = url.resolve(targetUrl, pRes.headers.location);
+      pRes.headers.location = `${proto}://${proxyDomain}/?u=${absoluteLocation}`;
+      log(`Redirect rewritten: ${pRes.headers.location}`);
     }
 
     res.writeHead(pRes.statusCode, pRes.headers);
