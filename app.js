@@ -61,9 +61,16 @@ server.on('connect', (req, clientSocket, head) => {
 function forwardRequest(targetUrl, req, res) {
   const opt = url.parse(targetUrl);
   opt.headers = Object.assign({}, req.headers);
-  delete opt.headers.host;
+  
+  // Ensure we have a User-Agent
+  if (!opt.headers['user-agent']) {
+    opt.headers['user-agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36';
+  }
+  
+  opt.headers.host = opt.host; // Set host header for SNI compatibility
   delete opt.headers['accept-encoding'];
   opt.method = req.method;
+  opt.rejectUnauthorized = false; // Bypass SSL certificate issues
 
   const lib = targetUrl.startsWith('https') ? https : http;
 
