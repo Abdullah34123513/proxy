@@ -10,8 +10,13 @@ curl_setopt($ch, CURLOPT_CUSTOMREQUEST, $_SERVER['REQUEST_METHOD']);
 
 $req_headers = [];
 foreach (getallheaders() as $key => $value) {
-    if (strtolower($key) !== 'host') $req_headers[] = "$key: $value";
+    if (strtolower($key) !== 'host') {
+        $req_headers[] = "$key: $value";
+    } else {
+        $req_headers[] = "X-Forwarded-Host: $value";
+    }
 }
+$req_headers[] = "X-Forwarded-Proto: " . (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http");
 curl_setopt($ch, CURLOPT_HTTPHEADER, $req_headers);
 
 if (in_array($_SERVER['REQUEST_METHOD'], ['POST', 'PUT', 'PATCH'])) {

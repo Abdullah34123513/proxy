@@ -89,7 +89,7 @@ function forwardRequest(targetUrl, req, res) {
   const pReq = lib.request(opt, (pRes) => {
     // Rewrite redirects for Web Mode (/?u=)
     if (pRes.headers.location && req.url.includes('?u=')) {
-      const proxyDomain = req.headers.host || 'vpn.abdullahsourcing.com';
+      const proxyDomain = req.headers['x-forwarded-host'] || req.headers.host || 'vpn.abdullahsourcing.com';
       const proto = req.headers['x-forwarded-proto'] || (req.connection.encrypted ? 'https' : 'http');
       const absoluteLocation = url.resolve(targetUrl, pRes.headers.location);
       pRes.headers.location = `${proto}://${proxyDomain}/?u=${absoluteLocation}`;
@@ -98,7 +98,7 @@ function forwardRequest(targetUrl, req, res) {
 
     // HTML Rewriting for sub-resources (links, images, scripts)
     const isHtml = pRes.headers['content-type'] && pRes.headers['content-type'].includes('text/html');
-    const proxyDomain = req.headers.host || 'vpn.abdullahsourcing.com';
+    const proxyDomain = req.headers['x-forwarded-host'] || req.headers.host || 'vpn.abdullahsourcing.com';
     const proto = req.headers['x-forwarded-proto'] || (req.connection.encrypted ? 'https' : 'http');
     const proxyBase = `${proto}://${proxyDomain}/?u=`;
 
