@@ -87,6 +87,13 @@ function forwardRequest(targetUrl, req, res) {
   const lib = targetUrl.startsWith('https') ? https : http;
 
   const pReq = lib.request(opt, (pRes) => {
+    // Rewrite redirects for Web Mode (/?u=)
+    if (pRes.headers.location && req.url.includes('?u=')) {
+      const proxyDomain = req.headers.host || 'vpn.abdullahsourcing.com';
+      const protocol = req.connection.encrypted ? 'https' : 'http';
+      pRes.headers.location = `${protocol}://${proxyDomain}/?u=${pRes.headers.location}`;
+    }
+
     res.writeHead(pRes.statusCode, pRes.headers);
     pRes.pipe(res, { end: true });
   });
