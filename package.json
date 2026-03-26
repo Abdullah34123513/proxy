@@ -1,0 +1,12 @@
+{
+  "name": "hostinger-node-proxy-bridge",
+  "version": "1.0.0",
+  "description": "A bridge for running Node.js apps on Hostinger Shared Hosting.",
+  "main": "app.js",
+  "scripts": {
+    "start": "node app.js",
+    "setup": "node setup.js"
+  },
+  "author": "Abdullah",
+  "license": "MIT"
+}
